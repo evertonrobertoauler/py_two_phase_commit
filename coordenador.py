@@ -1,5 +1,7 @@
 import socket
 from threading import Thread
+from json import JSONEncoder, JSONDecoder
+import time
 
 
 class Coordenador:
@@ -7,14 +9,14 @@ class Coordenador:
     transaction = False
     server = None
     participantes = {}
-    connection = {}
+    thread = None
 
     def __init__(self):
         self.start_server_socket()
 
         # executa self.accept_connections em uma thread
-        self.connection['thread'] = Thread(target=self.accept_connections)
-        self.connection['thread'].start()
+        self.thread = Thread(target=self.accept_connections)
+        self.thread.start()
 
     def stop(self):
         self.test_transaction(False)
@@ -30,24 +32,27 @@ class Coordenador:
 
             address = ":".join([str(a) for a in address])
 
-            client.send(bytes("accepted", "UTF-8"))
-
             # executa self.receive(address, client) em uma thread
             thread = Thread(target=self.receive, args=(address, client))
             thread.start()
 
             self.participantes[address] = {
                 'socket': client,
-                'thread': thread
+                'thread': thread,
+                'can_commit': True,
             }
 
     def receive(self, address, participante):
         while True:
             try:
-                message = participante.recv(1024)
+                message = participante.recv(1024).decode("utf-8")
                 if not message:
                     raise ConnectionResetError
-                print('receive', message)
+
+                retorno = JSONDecoder().decode(message)
+
+                if 'can_commit' in retorno:
+                    self.participantes[address]['can_commit'] = retorno['can_commit']
 
             except ConnectionResetError:
                 if address in self.participantes:
@@ -58,7 +63,10 @@ class Coordenador:
             participante = self.participantes[address]['socket']
 
             try:
-                participante.send(bytes(message, "UTF-8"))
+                participante.send(bytes(
+                    JSONEncoder().encode(message),
+                    "UTF-8"
+                ))
             except ConnectionResetError:
                 if address in self.participantes:
                     del self.participantes[address]
@@ -75,15 +83,47 @@ class Coordenador:
         self.transaction = True
 
     def creditar(self, address, valor):
-        self.test_transaction()
-        self.send(address, "creditar(%f)" % valor)
-        print('send', address, "'creditar(%f)'" % valor)
+        self.participantes[address]['can_commit'] = False
+        self.send(address, {
+            'method': 'creditar',
+            'valor': valor,
+        })
 
     def debitar(self, address, valor):
-        self.test_transaction()
-        self.send(address, "debitar(%f)" % valor)
-        print('send', address, "'debitar(%f)'" % valor)
+        self.participantes[address]['can_commit'] = False
+        self.send(address, {
+            'method': 'debitar',
+            'valor': valor,
+        })
+
+    def can_commit(self, address):
+        self.send(address, {'method': 'can_commit'})
+
+    def do_abort(self, address):
+        self.participantes[address]['can_commit'] = True
+        self.send(address, {'method': 'do_abort'})
+
+    def do_commit(self, address):
+        self.send(address, {'method': 'do_commit'})
 
     def finish_transaction(self):
         self.test_transaction()
+
+        list_can_commit = {k: v
+                           for k, v in self.participantes.items()
+                           if not v['can_commit']}
+
+        [self.can_commit(k) for k, v in list_can_commit.items()]
+
+        time.sleep(5)
+
+        if len([v for k, v in self.participantes.items() if not v['can_commit']]):
+            [self.do_abort(k) for k, v in list_can_commit.items()]
+            print('Abortado')
+        else:
+            [self.do_commit(k) for k, v in list_can_commit.items()]
+            print('Commit realizado')
+
         self.transaction = False
+
+

@@ -69,11 +69,13 @@ class Cliente():
         [print(" ", k, ":", v) for k, v in enumerate(self.participantes)]
 
     def lancar_credito(self):
+        self.coordenador.test_transaction()
         self.escolha_participante()
         self.entrada_valor()
         self.coordenador.creditar(self.participante, self.valor)
 
     def lancar_debito(self):
+        self.coordenador.test_transaction()
         self.escolha_participante()
         self.entrada_valor()
         self.coordenador.debitar(self.participante, self.valor)
@@ -90,7 +92,7 @@ class Cliente():
                 self.list_menu[self.num][1]()
             except StopIteration:
                 print("Cliente finalizado")
-                os.kill(os.getsid(), signal.SIGTERM)
+                os.kill(os.getpid(), signal.SIGTERM)
             except Exception as e:
                 print("Erro:", e)
 
