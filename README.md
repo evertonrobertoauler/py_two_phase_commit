@@ -1,8 +1,5 @@
-py_two_phase_commit
-===================
-
 Two-phase Commit
-
+===================
 
 # Dependências
 
