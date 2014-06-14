@@ -52,6 +52,7 @@ class Coordenador:
                 retorno = JSONDecoder().decode(message)
 
                 if 'can_commit' in retorno:
+                    print(address, retorno['can_commit'] and "Efetiva" or "Cancela")
                     self.participantes[address]['can_commit'] = retorno['can_commit']
 
             except ConnectionResetError:
@@ -97,13 +98,16 @@ class Coordenador:
         })
 
     def can_commit(self, address):
+        print(address, "canCommit?")
         self.send(address, {'method': 'can_commit'})
 
     def do_abort(self, address):
+        print(address, "doAbort")
         self.participantes[address]['can_commit'] = True
         self.send(address, {'method': 'do_abort'})
 
     def do_commit(self, address):
+        print(address, "doCommit")
         self.send(address, {'method': 'do_commit'})
 
     def finish_transaction(self):
